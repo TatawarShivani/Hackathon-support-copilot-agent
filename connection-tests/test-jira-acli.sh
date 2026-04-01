@@ -12,11 +12,11 @@ fi
 
 echo "✅ ACLI installed: $(acli --version)"
 
-# Test authentication by getting current user
+# Test authentication by checking auth status
 echo -e "\nTesting authentication..."
-if acli jira user me &> /dev/null; then
+if acli jira auth status &> /dev/null; then
     echo "✅ JIRA authentication successful!"
-    acli jira user me
+    acli jira auth status
 else
     echo "❌ JIRA authentication failed. Run:"
     echo "acli jira auth login --via-api-token"
@@ -25,19 +25,19 @@ fi
 
 # Test issue retrieval
 echo -e "\nTesting issue retrieval..."
-TEST_ISSUE=${TEST_JIRA_ISSUE:-"INC-1"}
-if acli jira issue get "$TEST_ISSUE" &> /dev/null; then
+TEST_ISSUE=${TEST_JIRA_ISSUE:-"CMSRC-8930"}
+if acli jira workitem view "$TEST_ISSUE" &> /dev/null; then
     echo "✅ Issue retrieval successful!"
-    acli jira issue get "$TEST_ISSUE" --format json | head -n 20
+    acli jira workitem view "$TEST_ISSUE"
 else
     echo "⚠️  Issue $TEST_ISSUE not found (this is OK if it doesn't exist)"
 fi
 
 # Test search
 echo -e "\nTesting JIRA search..."
-if acli jira search "order by created DESC" --max-results 3 &> /dev/null; then
+if acli jira workitem search "order by created DESC" --limit 3 &> /dev/null; then
     echo "✅ JIRA search working!"
-    acli jira search "order by created DESC" --max-results 3
+    acli jira workitem search "order by created DESC" --limit 3
 else
     echo "❌ JIRA search failed"
     exit 1
