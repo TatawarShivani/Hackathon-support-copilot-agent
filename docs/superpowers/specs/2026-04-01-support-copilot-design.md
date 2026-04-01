@@ -131,7 +131,7 @@ POST /api/incident/analyze
 
 ### **Before Hackathon:**
 - [ ] **Claude API Key** (console.anthropic.com) - ~$10 credits
-- [ ] **JIRA API credentials** (test with Postman)
+- [ ] **JIRA Access** - Option A: Install Atlassian CLI (ACLI) and authenticate OR Option B: Get API token
 - [ ] **SharePoint API access** (Microsoft Graph or REST)
 - [ ] **.NET 8 SDK** installed (`dotnet --version`)
 - [ ] **Node.js 18+** installed (`node --version`)
