@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using Amazon.BedrockRuntime;
+using Amazon.BedrockRuntime.Model;
 using SupportAgent.Models;
 
 namespace SupportAgent.Services;
@@ -13,72 +15,59 @@ public class ClaudeService : IClaudeService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<ClaudeService> _logger;
-    private readonly HttpClient _httpClient;
+    private readonly IAmazonBedrockRuntime _bedrockClient;
 
-    public ClaudeService(IConfiguration configuration, ILogger<ClaudeService> logger, HttpClient httpClient)
+    public ClaudeService(IConfiguration configuration, ILogger<ClaudeService> logger, IAmazonBedrockRuntime bedrockClient)
     {
         _configuration = configuration;
         _logger = logger;
-        _httpClient = httpClient;
+        _bedrockClient = bedrockClient;
     }
 
     public async Task<ResolutionGuidance?> AnalyzeIncidentAsync(IncidentDetails incident, List<SimilarIncident> similarIncidents)
     {
         try
         {
-            var apiKey = _configuration["Claude:ApiKey"] ?? Environment.GetEnvironmentVariable("CLAUDE_API_KEY");
-
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                _logger.LogWarning("Claude API key not configured");
-                return null;
-            }
-
+            var modelId = _configuration["AWS:BedrockModelId"] ?? "eu.anthropic.claude-sonnet-4-5-20250929-v1:0";
             var prompt = BuildAnalysisPrompt(incident, similarIncidents);
 
-            var requestBody = new
+            _logger.LogInformation("Sending request to AWS Bedrock with model {ModelId}", modelId);
+
+            var request = new ConverseRequest
             {
-                model = "claude-3-5-sonnet-20241022",
-                max_tokens = 2000,
-                messages = new[]
+                ModelId = modelId,
+                Messages = new List<Message>
                 {
-                    new { role = "user", content = prompt }
+                    new Message
+                    {
+                        Role = ConversationRole.User,
+                        Content = new List<ContentBlock>
+                        {
+                            new ContentBlock { Text = prompt }
+                        }
+                    }
+                },
+                InferenceConfig = new InferenceConfiguration
+                {
+                    MaxTokens = 2000,
+                    Temperature = 0.7f
                 }
             };
 
-            var request = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages")
+            var response = await _bedrockClient.ConverseAsync(request);
+
+            if (response.Output?.Message?.Content == null || response.Output.Message.Content.Count == 0)
             {
-                Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
-            };
-
-            request.Headers.Add("x-api-key", apiKey);
-            request.Headers.Add("anthropic-version", "2023-06-01");
-
-            _logger.LogInformation("Sending request to Claude API");
-
-            var response = await _httpClient.SendAsync(request);
-            var responseContent = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Claude API error: {StatusCode} - {Content}", response.StatusCode, responseContent);
+                _logger.LogWarning("Empty response from AWS Bedrock");
                 return null;
             }
 
-            var claudeResponse = JsonSerializer.Deserialize<ClaudeApiResponse>(responseContent);
-
-            if (claudeResponse?.Content == null || claudeResponse.Content.Length == 0)
-            {
-                _logger.LogWarning("Empty response from Claude API");
-                return null;
-            }
-
-            var analysisText = claudeResponse.Content[0].Text;
+            var analysisText = response.Output.Message.Content[0].Text;
             return ParseClaudeResponse(analysisText);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error calling Claude API");
+            _logger.LogError(ex, "Error calling AWS Bedrock");
             return null;
         }
     }
@@ -162,15 +151,5 @@ public class ClaudeService : IClaudeService
             _logger.LogError(ex, "Error parsing Claude response");
             return null;
         }
-    }
-
-    private class ClaudeApiResponse
-    {
-        public ClaudeContent[]? Content { get; set; }
-    }
-
-    private class ClaudeContent
-    {
-        public string Text { get; set; } = string.Empty;
     }
 }
