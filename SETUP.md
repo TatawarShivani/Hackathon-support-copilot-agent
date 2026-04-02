@@ -27,6 +27,12 @@ Before running the application, ensure you have:
    ```
    Download from: https://developer.atlassian.com/cloud/acli/guides/install-windows/
 
+5. **AWS CLI** installed (for Bedrock/Claude AI)
+   ```bash
+   aws --version
+   ```
+   Download from: https://aws.amazon.com/cli/
+
 ---
 
 ## Step 1: Clone the Repository
@@ -59,7 +65,25 @@ You should see incident details if authentication is successful.
 
 ---
 
-## Step 3: Run the Application
+## Step 3: Authenticate with AWS Bedrock
+
+```bash
+# Login to AWS SSO (for Claude AI via Bedrock)
+aws sso login --profile as24-bedrock-readonly
+```
+
+Expected: Browser opens, you authenticate, then see "Successfully logged in"
+
+**Verify:**
+```bash
+aws sts get-caller-identity --profile as24-bedrock-readonly
+```
+
+See [AWS-BEDROCK-SETUP.md](AWS-BEDROCK-SETUP.md) for detailed instructions.
+
+---
+
+## Step 4: Run the Application
 
 ```bash
 cd support-agent
@@ -74,7 +98,7 @@ Application started. Press Ctrl+C to shut down.
 
 ---
 
-## Step 4: Open the UI
+## Step 5: Open the UI
 
 Open your browser and navigate to:
 
