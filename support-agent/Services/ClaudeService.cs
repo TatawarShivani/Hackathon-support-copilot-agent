@@ -75,50 +75,59 @@ public class ClaudeService : IClaudeService
     private string BuildAnalysisPrompt(IncidentDetails incident, List<SimilarIncident> similarIncidents)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are a production support AI assistant. Analyze this incident and provide actionable resolution guidance.");
+        sb.AppendLine("You are an expert production support engineer analyzing a technical incident. Provide specific, actionable resolution steps.");
         sb.AppendLine();
         sb.AppendLine("## Current Incident");
-        sb.AppendLine($"ID: {incident.Key}");
-        sb.AppendLine($"Type: {incident.Type}");
-        sb.AppendLine($"Priority: {incident.Priority}");
-        sb.AppendLine($"Status: {incident.Status}");
-        sb.AppendLine($"Summary: {incident.Summary}");
-        sb.AppendLine($"Description: {incident.Description}");
+        sb.AppendLine($"**ID:** {incident.Key}");
+        sb.AppendLine($"**Type:** {incident.Type}");
+        sb.AppendLine($"**Priority:** {incident.Priority}");
+        sb.AppendLine($"**Status:** {incident.Status}");
+        sb.AppendLine($"**Summary:** {incident.Summary}");
+        sb.AppendLine($"**Description:** {incident.Description}");
         sb.AppendLine();
 
         if (similarIncidents.Any())
         {
-            sb.AppendLine("## Similar Past Incidents");
+            sb.AppendLine("## Similar Resolved Incidents (for context)");
             foreach (var similar in similarIncidents.Take(3))
             {
-                sb.AppendLine($"- {similar.Key}: {similar.Summary} (Status: {similar.Status})");
+                sb.AppendLine($"- **{similar.Key}:** {similar.Summary} ({similar.Status})");
             }
             sb.AppendLine();
         }
 
-        sb.AppendLine("## Instructions");
-        sb.AppendLine("Provide your analysis in the following JSON format:");
+        sb.AppendLine("## Task");
+        sb.AppendLine("Analyze the incident description carefully. Identify:");
+        sb.AppendLine("1. The likely root cause based on error messages, symptoms, and context");
+        sb.AppendLine("2. Specific technical steps to diagnose and resolve");
+        sb.AppendLine("3. Exact commands, file paths, or configuration changes needed");
+        sb.AppendLine("4. Validation steps to confirm resolution");
+        sb.AppendLine();
+        sb.AppendLine("## Output Format");
+        sb.AppendLine("Return a JSON object with this exact structure:");
         sb.AppendLine(@"{
-  ""summary"": ""Brief diagnosis of the issue"",
+  ""summary"": ""<2-3 sentence diagnosis explaining the root cause and recommended fix>"",
   ""steps"": [
     {
       ""stepNumber"": 1,
-      ""action"": ""Description of what to do"",
-      ""command"": ""Actual command to run (if applicable)"",
-      ""expectedOutput"": ""What should happen""
+      ""action"": ""<Clear action description>"",
+      ""command"": ""<Exact command to run, or empty string if not applicable>"",
+      ""expectedOutput"": ""<What to expect after running the command>""
     }
   ],
-  ""slaWarning"": ""SLA-related warning if priority is high"",
-  ""confidenceScore"": 0.85
+  ""slaWarning"": ""<Warning about time-sensitive actions if priority is High/Critical, or empty string>"",
+  ""confidenceScore"": <number between 0.0 and 1.0>
 }");
         sb.AppendLine();
-        sb.AppendLine("Focus on:");
-        sb.AppendLine("1. Root cause analysis based on the description");
-        sb.AppendLine("2. Specific actionable steps with commands where applicable");
-        sb.AppendLine("3. Validation checks after each step");
-        sb.AppendLine("4. If priority is High or Critical, include SLA warning");
+        sb.AppendLine("## Guidelines");
+        sb.AppendLine("- Be specific: Use actual file paths, service names, command syntax");
+        sb.AppendLine("- For SQL/database issues: Suggest checking connections, timeouts, query performance");
+        sb.AppendLine("- For file issues: Check file existence, permissions, size");
+        sb.AppendLine("- For jobs: Check logs, schedules, dependencies");
+        sb.AppendLine("- Include 3-5 actionable steps");
+        sb.AppendLine("- Confidence score: 0.9+ if very similar to past incidents, 0.7-0.8 if clear diagnosis, 0.5-0.6 if more investigation needed");
         sb.AppendLine();
-        sb.AppendLine("Return ONLY the JSON, no additional text.");
+        sb.AppendLine("Return ONLY valid JSON, no markdown code blocks or extra text.");
 
         return sb.ToString();
     }

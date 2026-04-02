@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Support Copilot Agent</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
         body {
             padding: 20px;
@@ -92,6 +93,45 @@
             color: #721c24;
             margin-bottom: 20px;
         }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .step-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .step-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .copy-btn {
+            cursor: pointer;
+            margin-left: 10px;
+            padding: 5px 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        .copy-btn:hover {
+            background: #5568d3;
+        }
+        .tooltip-custom {
+            position: relative;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
@@ -117,10 +157,16 @@
         <div class="error-message" id="errorMessage"></div>
 
         <div class="loading" id="loading">
-            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <div class="spinner-border text-primary pulse" role="status" style="width: 3rem; height: 3rem;">
                 <span class="visually-hidden">Loading...</span>
             </div>
-            <p class="mt-3" id="loadingMessage">Fetching incident details from JIRA...</p>
+            <p class="mt-3" id="loadingMessage">
+                <i class="bi bi-hourglass-split"></i> Fetching incident details from JIRA...
+            </p>
+            <div class="progress mt-3" style="width: 300px; margin: 0 auto;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar"
+                     role="progressbar" style="width: 0%"></div>
+            </div>
         </div>
 
         <div class="result-card" id="resultCard">
@@ -216,9 +262,14 @@
             document.getElementById('searchBtn').disabled = true;
 
             try {
-                // Show progress
-                updateLoadingMessage('Fetching incident from JIRA...');
-                await sleep(500);
+                // Show progress with animation
+                updateLoadingMessage('<i class="bi bi-search"></i> Fetching incident from JIRA...', 25);
+                await sleep(800);
+
+                updateLoadingMessage('<i class="bi bi-clock-history"></i> Searching similar incidents...', 50);
+                await sleep(800);
+
+                updateLoadingMessage('<i class="bi bi-robot"></i> Analyzing with AI...', 75);
 
                 const response = await fetch(`http://localhost:5097/api/incident/analyze/${incidentId}`);
 
@@ -258,7 +309,9 @@
                 displayResolutionGuidance(data.resolutionGuidance);
             }
 
-            document.getElementById('resultCard').style.display = 'block';
+            const resultCard = document.getElementById('resultCard');
+            resultCard.style.display = 'block';
+            resultCard.classList.add('fade-in');
         }
 
         function displaySimilarIncidents(incidents) {
@@ -328,23 +381,28 @@
                 const headerId = `heading${index}`;
 
                 html += `
-                    <div class="accordion-item">
+                    <div class="accordion-item step-card fade-in" style="animation-delay: ${index * 0.1}s">
                         <h2 class="accordion-header" id="${headerId}">
                             <button class="accordion-button ${index > 0 ? 'collapsed' : ''}" type="button"
                                     data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+                                <i class="bi bi-${index + 1}-circle-fill me-2"></i>
                                 Step ${step.stepNumber}: ${step.action}
                             </button>
                         </h2>
                         <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}"
                              data-bs-parent="#resolutionStepsAccordion">
                             <div class="accordion-body">
-                                <p><strong>Action:</strong> ${step.action}</p>
+                                <p><i class="bi bi-info-circle text-primary"></i> <strong>Action:</strong> ${step.action}</p>
                                 ${step.command ? `
-                                    <p><strong>Command:</strong></p>
-                                    <pre class="bg-dark text-white p-3 rounded"><code>${step.command}</code></pre>
+                                    <p><i class="bi bi-terminal text-success"></i> <strong>Command:</strong>
+                                        <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(step.command)}', this)">
+                                            <i class="bi bi-clipboard"></i> Copy
+                                        </button>
+                                    </p>
+                                    <pre class="bg-dark text-white p-3 rounded"><code>${escapeHtml(step.command)}</code></pre>
                                 ` : ''}
                                 ${step.expectedOutput ? `
-                                    <p><strong>Expected Output:</strong> ${step.expectedOutput}</p>
+                                    <p><i class="bi bi-check-circle text-success"></i> <strong>Expected Result:</strong> ${step.expectedOutput}</p>
                                 ` : ''}
                             </div>
                         </div>
@@ -355,8 +413,31 @@
             accordion.innerHTML = html;
         }
 
-        function updateLoadingMessage(message) {
-            document.getElementById('loadingMessage').textContent = message;
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+                button.style.background = '#28a745';
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.style.background = '#667eea';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        function updateLoadingMessage(message, progress) {
+            document.getElementById('loadingMessage').innerHTML = message;
+            if (progress) {
+                document.getElementById('progressBar').style.width = progress + '%';
+            }
         }
 
         function sleep(ms) {
@@ -395,5 +476,6 @@
             errorDiv.style.display = 'block';
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
