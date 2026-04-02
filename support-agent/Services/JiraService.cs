@@ -7,6 +7,7 @@ namespace SupportAgent.Services;
 public interface IJiraService
 {
     Task<IncidentDetails?> GetIncidentAsync(string incidentId);
+    Task<List<IncidentDetails>> SearchIncidentsAsync(string keywords, int maxResults = 5);
 }
 
 public class JiraService : IJiraService
@@ -59,6 +60,89 @@ public class JiraService : IJiraService
             _logger.LogError(ex, "Error fetching incident {IncidentId}", incidentId);
             return null;
         }
+    }
+
+    public async Task<List<IncidentDetails>> SearchIncidentsAsync(string keywords, int maxResults = 5)
+    {
+        try
+        {
+            _logger.LogInformation("Searching JIRA for incidents with keywords: {Keywords}", keywords);
+
+            var jql = $"text ~ \"{keywords}\" AND status in (Resolved, Closed) ORDER BY created DESC";
+
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "acli",
+                    Arguments = $"jira workitem search --jql \"{jql}\" --limit {maxResults}",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            string output = await process.StandardOutput.ReadToEndAsync();
+            string error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                _logger.LogWarning("ACLI search error: {Error}", error);
+                return new List<IncidentDetails>();
+            }
+
+            return ParseSearchResults(output);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching incidents");
+            return new List<IncidentDetails>();
+        }
+    }
+
+    private List<IncidentDetails> ParseSearchResults(string output)
+    {
+        var incidents = new List<IncidentDetails>();
+
+        try
+        {
+            // Parse table output from ACLI
+            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var line in lines)
+            {
+                // Skip header and separator lines
+                if (line.Contains("─") || line.Contains("Type") || line.Contains("│ Type"))
+                    continue;
+
+                // Parse table row: │ Type │ Key │ Assignee │ Priority │ Status │ Summary │
+                var parts = line.Split('│', StringSplitOptions.TrimEntries)
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .ToArray();
+
+                if (parts.Length >= 6)
+                {
+                    incidents.Add(new IncidentDetails
+                    {
+                        Type = parts[0],
+                        Key = parts[1],
+                        Assignee = parts[2],
+                        Priority = parts[3],
+                        Status = parts[4],
+                        Summary = parts[5]
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error parsing search results");
+        }
+
+        return incidents;
     }
 
     private IncidentDetails ParseJiraOutput(string output)

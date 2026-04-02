@@ -8,6 +8,9 @@ builder.Services.AddOpenApi();
 
 // Register custom services
 builder.Services.AddScoped<IJiraService, JiraService>();
+builder.Services.AddScoped<IClaudeService, ClaudeService>();
+builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
+builder.Services.AddHttpClient<ClaudeService>();
 
 // Add CORS
 builder.Services.AddCors(options =>

@@ -8,32 +8,32 @@ namespace SupportAgent.Controllers;
 [Route("api/[controller]")]
 public class IncidentController : ControllerBase
 {
-    private readonly IJiraService _jiraService;
+    private readonly IAgentOrchestrator _orchestrator;
     private readonly ILogger<IncidentController> _logger;
 
-    public IncidentController(IJiraService jiraService, ILogger<IncidentController> logger)
+    public IncidentController(IAgentOrchestrator orchestrator, ILogger<IncidentController> logger)
     {
-        _jiraService = jiraService;
+        _orchestrator = orchestrator;
         _logger = logger;
     }
 
-    [HttpGet("{incidentId}")]
-    public async Task<ActionResult<IncidentDetails>> GetIncident(string incidentId)
+    [HttpGet("analyze/{incidentId}")]
+    public async Task<ActionResult<IncidentAnalysisResponse>> AnalyzeIncident(string incidentId)
     {
-        _logger.LogInformation("Received request for incident {IncidentId}", incidentId);
+        _logger.LogInformation("Received analysis request for incident {IncidentId}", incidentId);
 
         if (string.IsNullOrWhiteSpace(incidentId))
         {
             return BadRequest("Incident ID is required");
         }
 
-        var incident = await _jiraService.GetIncidentAsync(incidentId);
+        var analysis = await _orchestrator.AnalyzeIncidentAsync(incidentId);
 
-        if (incident == null)
+        if (analysis == null)
         {
             return NotFound($"Incident {incidentId} not found");
         }
 
-        return Ok(incident);
+        return Ok(analysis);
     }
 }

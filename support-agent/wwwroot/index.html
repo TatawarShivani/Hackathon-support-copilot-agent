@@ -120,7 +120,7 @@
             <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
                 <span class="visually-hidden">Loading...</span>
             </div>
-            <p class="mt-3">Fetching incident details from JIRA...</p>
+            <p class="mt-3" id="loadingMessage">Fetching incident details from JIRA...</p>
         </div>
 
         <div class="result-card" id="resultCard">
@@ -165,6 +165,31 @@
                 <div class="incident-label">Description</div>
                 <div class="incident-value" id="incidentDescription" style="white-space: pre-wrap;"></div>
             </div>
+
+            <div id="similarIncidentsSection" style="display: none;">
+                <h4 class="mt-4 mb-3">🔍 Similar Past Incidents</h4>
+                <div id="similarIncidentsList"></div>
+            </div>
+
+            <div id="resolutionSection" style="display: none;">
+                <h4 class="mt-4 mb-3">🤖 AI-Powered Resolution Guidance</h4>
+
+                <div class="alert alert-info" id="resolutionSummary"></div>
+
+                <div class="incident-field">
+                    <div class="incident-label">Confidence Score</div>
+                    <div class="incident-value">
+                        <div class="progress" style="height: 25px;">
+                            <div class="progress-bar" id="confidenceBar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="slaWarning" class="alert alert-warning" style="display: none;"></div>
+
+                <h5 class="mt-4 mb-3">Resolution Steps</h5>
+                <div class="accordion" id="resolutionStepsAccordion"></div>
+            </div>
         </div>
     </div>
 
@@ -191,7 +216,11 @@
             document.getElementById('searchBtn').disabled = true;
 
             try {
-                const response = await fetch(`http://localhost:5097/api/incident/${incidentId}`);
+                // Show progress
+                updateLoadingMessage('Fetching incident from JIRA...');
+                await sleep(500);
+
+                const response = await fetch(`http://localhost:5097/api/incident/analyze/${incidentId}`);
 
                 if (!response.ok) {
                     throw new Error(`Failed to fetch incident: ${response.statusText}`);
@@ -209,15 +238,129 @@
         }
 
         function displayIncident(data) {
-            document.getElementById('incidentKey').textContent = data.key || 'N/A';
-            document.getElementById('incidentType').textContent = data.type || 'N/A';
-            document.getElementById('incidentPriority').innerHTML = formatPriority(data.priority);
-            document.getElementById('incidentStatus').innerHTML = formatStatus(data.status);
-            document.getElementById('incidentAssignee').textContent = data.assignee || 'Unassigned';
-            document.getElementById('incidentSummary').textContent = data.summary || 'N/A';
-            document.getElementById('incidentDescription').textContent = data.description || 'No description available';
+            // Display incident details
+            const incident = data.incidentSummary;
+            document.getElementById('incidentKey').textContent = incident.key || 'N/A';
+            document.getElementById('incidentType').textContent = incident.type || 'N/A';
+            document.getElementById('incidentPriority').innerHTML = formatPriority(incident.priority);
+            document.getElementById('incidentStatus').innerHTML = formatStatus(incident.status);
+            document.getElementById('incidentAssignee').textContent = incident.assignee || 'Unassigned';
+            document.getElementById('incidentSummary').textContent = incident.summary || 'N/A';
+            document.getElementById('incidentDescription').textContent = incident.description || 'No description available';
+
+            // Display similar incidents
+            if (data.similarIncidents && data.similarIncidents.length > 0) {
+                displaySimilarIncidents(data.similarIncidents);
+            }
+
+            // Display AI resolution guidance
+            if (data.resolutionGuidance) {
+                displayResolutionGuidance(data.resolutionGuidance);
+            }
 
             document.getElementById('resultCard').style.display = 'block';
+        }
+
+        function displaySimilarIncidents(incidents) {
+            const section = document.getElementById('similarIncidentsSection');
+            const list = document.getElementById('similarIncidentsList');
+
+            let html = '<div class="list-group">';
+            incidents.forEach(inc => {
+                const relevancePercent = (inc.relevance * 100).toFixed(0);
+                html += `
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">${inc.key}</h6>
+                            <small class="text-muted">${relevancePercent}% relevant</small>
+                        </div>
+                        <p class="mb-1">${inc.summary}</p>
+                        <small>Status: ${inc.status}</small>
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            list.innerHTML = html;
+            section.style.display = 'block';
+        }
+
+        function displayResolutionGuidance(guidance) {
+            const section = document.getElementById('resolutionSection');
+
+            // Summary
+            document.getElementById('resolutionSummary').textContent = guidance.summary;
+
+            // Confidence score
+            const confidencePercent = (guidance.confidenceScore * 100).toFixed(0);
+            const confidenceBar = document.getElementById('confidenceBar');
+            confidenceBar.style.width = confidencePercent + '%';
+            confidenceBar.textContent = confidencePercent + '%';
+
+            // Set color based on confidence
+            if (guidance.confidenceScore >= 0.8) {
+                confidenceBar.className = 'progress-bar bg-success';
+            } else if (guidance.confidenceScore >= 0.6) {
+                confidenceBar.className = 'progress-bar bg-warning';
+            } else {
+                confidenceBar.className = 'progress-bar bg-danger';
+            }
+
+            // SLA warning
+            if (guidance.slaWarning) {
+                const slaDiv = document.getElementById('slaWarning');
+                slaDiv.textContent = '⚠️ ' + guidance.slaWarning;
+                slaDiv.style.display = 'block';
+            }
+
+            // Resolution steps
+            displayResolutionSteps(guidance.steps);
+
+            section.style.display = 'block';
+        }
+
+        function displayResolutionSteps(steps) {
+            const accordion = document.getElementById('resolutionStepsAccordion');
+
+            let html = '';
+            steps.forEach((step, index) => {
+                const collapseId = `collapse${index}`;
+                const headerId = `heading${index}`;
+
+                html += `
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="${headerId}">
+                            <button class="accordion-button ${index > 0 ? 'collapsed' : ''}" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+                                Step ${step.stepNumber}: ${step.action}
+                            </button>
+                        </h2>
+                        <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}"
+                             data-bs-parent="#resolutionStepsAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Action:</strong> ${step.action}</p>
+                                ${step.command ? `
+                                    <p><strong>Command:</strong></p>
+                                    <pre class="bg-dark text-white p-3 rounded"><code>${step.command}</code></pre>
+                                ` : ''}
+                                ${step.expectedOutput ? `
+                                    <p><strong>Expected Output:</strong> ${step.expectedOutput}</p>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            accordion.innerHTML = html;
+        }
+
+        function updateLoadingMessage(message) {
+            document.getElementById('loadingMessage').textContent = message;
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
         function formatStatus(status) {
